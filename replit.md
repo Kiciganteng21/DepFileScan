@@ -1,6 +1,6 @@
 # Overview
 
-Python Dependency Reader is a CLI tool designed to read, parse, and analyze multiple dependency file formats commonly used in Python projects. The tool supports requirements.txt, Pipfile, and pyproject.toml files, providing unified dependency analysis with conflict detection capabilities and PyPI integration for package validation.
+Python Dependency Reader is a CLI tool designed to read, parse, and analyze multiple dependency file formats commonly used in Python projects. The tool supports requirements.txt, Pipfile, and pyproject.toml files, providing unified dependency analysis with conflict detection capabilities and PyPI integration for package validation. The tool can search for dependency files both in a specific directory and recursively through subdirectories, making it suitable for complex multi-module projects.
 
 # User Preferences
 
@@ -27,10 +27,11 @@ The ConflictDetector analyzes dependencies across multiple files to identify ver
 
 ### CLI Interface
 Built with Click framework providing:
-- Command-line argument parsing
+- Command-line argument parsing with support for recursive directory searching
 - Colored output using colorlog
 - Verbose logging options
 - Structured command groups for extensibility
+- Flexible path specification with recursive search capabilities
 
 ### Caching and Rate Limiting
 PyPI client implements intelligent caching and rate limiting:

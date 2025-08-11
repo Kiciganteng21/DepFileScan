@@ -59,21 +59,23 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 @cli.command()
 @click.option('--path', '-p', type=click.Path(exists=True, path_type=Path), 
               default=Path('.'), help='Path to search for dependency files')
+@click.option('--recursive', '-r', is_flag=True, help='Search for dependency files recursively in subdirectories')
 @click.option('--format', '-f', type=click.Choice(['json', 'table', 'simple']), 
               default='table', help='Output format')
 @click.option('--check-pypi', is_flag=True, help='Check PyPI for package information')
 @click.option('--detect-conflicts', is_flag=True, help='Detect conflicts between dependency files')
 @click.pass_context
-def parse(ctx: click.Context, path: Path, format: str, check_pypi: bool, detect_conflicts: bool) -> None:
+def parse(ctx: click.Context, path: Path, recursive: bool, format: str, check_pypi: bool, detect_conflicts: bool) -> None:
     """Parse dependency files in the specified directory"""
     logger = logging.getLogger(__name__)
     
     try:
         # Find dependency files
-        dependency_files = find_dependency_files(path)
+        dependency_files = find_dependency_files(path, recursive)
         
         if not dependency_files:
-            logger.warning(f"No dependency files found in {path}")
+            search_type = "recursively" if recursive else "directly"
+            logger.warning(f"No dependency files found {search_type} in {path}")
             return
         
         logger.info(f"Found {len(dependency_files)} dependency file(s)")
@@ -164,24 +166,57 @@ def info(package_name: str, format: str) -> None:
         logger.error(f"Error fetching package information: {e}")
 
 
-def find_dependency_files(path: Path) -> List[Path]:
+def find_dependency_files(path: Path, recursive: bool = False) -> List[Path]:
     """Find all dependency files in the given path"""
     dependency_files = []
     
-    # Check for requirements.txt
-    req_file = path / "requirements.txt"
-    if req_file.exists():
-        dependency_files.append(req_file)
-    
-    # Check for Pipfile
-    pipfile = path / "Pipfile"
-    if pipfile.exists():
-        dependency_files.append(pipfile)
-    
-    # Check for pyproject.toml
-    pyproject_file = path / "pyproject.toml"
-    if pyproject_file.exists():
-        dependency_files.append(pyproject_file)
+    if recursive:
+        # Recursively search for dependency files
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Searching recursively in {path}")
+        
+        # Search for requirements.txt files
+        for req_file in path.rglob("requirements*.txt"):
+            if req_file.is_file() and not req_file.name.startswith('.'):
+                dependency_files.append(req_file)
+        
+        # Search for Pipfiles
+        for pipfile in path.rglob("Pipfile"):
+            if pipfile.is_file() and not pipfile.name.startswith('.'):
+                dependency_files.append(pipfile)
+        
+        # Search for pyproject.toml files
+        for pyproject_file in path.rglob("pyproject.toml"):
+            if pyproject_file.is_file() and not pyproject_file.name.startswith('.'):
+                dependency_files.append(pyproject_file)
+        
+        # Filter out files in common ignore directories
+        ignore_dirs = {'.git', '.tox', '.venv', 'venv', 'env', '__pycache__', 
+                      'node_modules', '.pytest_cache', 'build', 'dist', '.eggs'}
+        
+        filtered_files = []
+        for file_path in dependency_files:
+            # Check if any parent directory is in ignore list
+            if not any(part.name in ignore_dirs for part in file_path.parents):
+                filtered_files.append(file_path)
+        
+        dependency_files = filtered_files
+    else:
+        # Only check the specified directory
+        # Check for requirements.txt
+        req_file = path / "requirements.txt"
+        if req_file.exists():
+            dependency_files.append(req_file)
+        
+        # Check for Pipfile
+        pipfile = path / "Pipfile"
+        if pipfile.exists():
+            dependency_files.append(pipfile)
+        
+        # Check for pyproject.toml
+        pyproject_file = path / "pyproject.toml"
+        if pyproject_file.exists():
+            dependency_files.append(pyproject_file)
     
     return dependency_files
 
