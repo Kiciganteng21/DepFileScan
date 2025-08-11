@@ -4,6 +4,7 @@ Command Line Interface for the Dependency Reader
 
 import os
 import sys
+import json
 import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
@@ -18,7 +19,7 @@ from .parsers.pyproject_parser import PyprojectParser
 from .conflict_detector import ConflictDetector
 from .pypi_client import PyPIClient
 from .python_scanner import PythonScanner
-from .models import DependencyFile, Dependency, ConflictReport
+from .models import DependencyFile, Dependency, ConflictReport, ProjectReport, PackageInfo
 from .utils import setup_logging, format_dependencies, format_conflicts
 
 
