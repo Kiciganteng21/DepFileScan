@@ -17,6 +17,7 @@ from .parsers.pipfile_parser import PipfileParser
 from .parsers.pyproject_parser import PyprojectParser
 from .conflict_detector import ConflictDetector
 from .pypi_client import PyPIClient
+from .python_scanner import PythonScanner
 from .models import DependencyFile, Dependency, ConflictReport
 from .utils import setup_logging, format_dependencies, format_conflicts
 
@@ -125,6 +126,73 @@ def parse(ctx: click.Context, path: Path, recursive: bool, format: str, check_py
     
     except Exception as e:
         logger.error(f"Error parsing dependency files: {e}")
+        if ctx.obj.get('verbose'):
+            raise
+
+
+@cli.command()
+@click.option('--path', '-p', type=click.Path(exists=True, path_type=Path), 
+              default=Path('.'), help='Path to scan for Python files')
+@click.option('--recursive', '-r', is_flag=True, help='Scan Python files recursively in subdirectories')
+@click.option('--log', '-l', type=str, default='dependencies.txt', help='Log file to save dependencies (default: dependencies.txt)')
+@click.option('--format', '-f', type=click.Choice(['json', 'table', 'simple']), 
+              default='table', help='Output format')
+@click.option('--check-pypi', is_flag=True, help='Check PyPI for package information')
+@click.pass_context
+def scan(ctx: click.Context, path: Path, recursive: bool, log: str, format: str, check_pypi: bool) -> None:
+    """Scan Python files and extract dependencies from import statements"""
+    logger = logging.getLogger(__name__)
+    
+    try:
+        scanner = PythonScanner()
+        
+        if path.is_file():
+            # Scan single file
+            logger.info(f"Scanning Python file: {path}")
+            dependency_file = scanner.scan_file(path)
+            dependency_files = [dependency_file] if dependency_file else []
+        else:
+            # Scan directory
+            search_type = "recursively" if recursive else "directly"
+            logger.info(f"Scanning {search_type} in directory: {path}")
+            dependency_files = scanner.scan_directory(path, recursive)
+        
+        if not dependency_files:
+            logger.warning(f"No Python dependencies found in {path}")
+            return
+        
+        logger.info(f"Found dependencies in {len(dependency_files)} Python file(s)")
+        
+        # Display dependencies
+        display_dependencies(dependency_files, format)
+        
+        # Save to log file
+        log_path = save_dependencies_to_log(dependency_files, log, scanner)
+        logger.info(f"Dependencies saved to {log_path}")
+        
+        # Check PyPI if requested
+        if check_pypi:
+            logger.info("Fetching package information from PyPI...")
+            pypi_client = PyPIClient()
+            
+            all_packages = set()
+            for dep_file in dependency_files:
+                for dep in dep_file.dependencies:
+                    all_packages.add(dep.name)
+            
+            for package_name in sorted(all_packages):
+                try:
+                    package_info = pypi_client.get_package_info(package_name)
+                    if package_info:
+                        latest_version = package_info.get('info', {}).get('version', 'Unknown')
+                        logger.info(f"{package_name}: Latest version on PyPI is {latest_version}")
+                    else:
+                        logger.warning(f"Package '{package_name}' not found on PyPI (might be a local module)")
+                except Exception as e:
+                    logger.warning(f"Could not fetch PyPI info for {package_name}: {e}")
+    
+    except Exception as e:
+        logger.error(f"Error scanning Python files: {e}")
         if ctx.obj.get('verbose'):
             raise
 
@@ -323,6 +391,43 @@ def display_conflicts(conflicts: List[ConflictReport], format: str) -> None:
                 dev_marker = " [DEV]" if version_info.is_dev else ""
                 version_str = str(version_info.version_spec) if version_info.version_spec else "any version"
                 click.echo(f"    {version_info.file_path}: {version_str}{dev_marker}")
+
+
+def save_dependencies_to_log(dependency_files: List[DependencyFile], log_filename: str, scanner) -> Path:
+    """Save dependencies to a log file"""
+    from datetime import datetime
+    
+    log_path = Path(log_filename)
+    
+    with open(log_path, 'w', encoding='utf-8') as f:
+        f.write(f"# Python Dependencies Analysis\n")
+        f.write(f"# Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"# Total files analyzed: {len(dependency_files)}\n\n")
+        
+        # Get package summary
+        package_files = scanner.merge_dependencies_by_package(dependency_files)
+        
+        f.write("## Summary\n")
+        f.write(f"Total unique packages found: {len(package_files)}\n\n")
+        
+        f.write("## Package Usage\n")
+        for package_name in sorted(package_files.keys()):
+            files = package_files[package_name]
+            f.write(f"- {package_name} (used in {len(files)} file(s))\n")
+            for file_path in files:
+                f.write(f"  - {file_path}\n")
+        f.write("\n")
+        
+        f.write("## Detailed Analysis\n")
+        for dep_file in dependency_files:
+            f.write(f"\n### {dep_file.file_path}\n")
+            if dep_file.dependencies:
+                for dep in dep_file.dependencies:
+                    f.write(f"- {dep.name}\n")
+            else:
+                f.write("No external dependencies found\n")
+    
+    return log_path
 
 
 def main() -> None:

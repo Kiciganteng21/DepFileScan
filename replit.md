@@ -1,6 +1,6 @@
 # Overview
 
-Python Dependency Reader is a CLI tool designed to read, parse, and analyze multiple dependency file formats commonly used in Python projects. The tool supports requirements.txt, Pipfile, and pyproject.toml files, providing unified dependency analysis with conflict detection capabilities and PyPI integration for package validation. The tool can search for dependency files both in a specific directory and recursively through subdirectories, making it suitable for complex multi-module projects.
+Python Dependency Reader is a comprehensive CLI tool that reads, parses, and analyzes multiple dependency file formats commonly used in Python projects. The tool supports requirements.txt, Pipfile, and pyproject.toml files, providing unified dependency analysis with conflict detection capabilities and PyPI integration for package validation. Additionally, it includes a powerful Python source code scanner that uses AST analysis to extract dependencies from import statements. The tool can search for dependency files both in a specific directory and recursively through subdirectories, making it suitable for complex multi-module projects.
 
 # User Preferences
 
@@ -15,6 +15,7 @@ The application uses a modular parser system with separate parsers for each depe
 - **RequirementsParser**: Handles requirements.txt files with support for various pip options and URL-based dependencies
 - **PipfileParser**: Processes Pipfile format with fallback to manual parsing if the pipfile library is unavailable
 - **PyprojectParser**: Supports multiple pyproject.toml formats including Poetry, PDM, and Flit
+- **PythonScanner**: Uses AST analysis to extract dependencies from Python import statements with stdlib filtering
 
 ### Data Models
 The system uses dataclasses for type-safe data representation:
@@ -26,12 +27,18 @@ The system uses dataclasses for type-safe data representation:
 The ConflictDetector analyzes dependencies across multiple files to identify version conflicts, grouping packages by name and comparing version specifications using packaging library standards.
 
 ### CLI Interface
-Built with Click framework providing:
+Built with Click framework providing three main commands:
+- **parse**: Traditional dependency file analysis (requirements.txt, Pipfile, pyproject.toml)
+- **scan**: Python source code analysis with AST-based import extraction
+- **info**: Direct PyPI package information lookup
+
+Features include:
 - Command-line argument parsing with support for recursive directory searching
 - Colored output using colorlog
 - Verbose logging options
 - Structured command groups for extensibility
 - Flexible path specification with recursive search capabilities
+- Custom log file output with detailed dependency analysis
 
 ### Caching and Rate Limiting
 PyPI client implements intelligent caching and rate limiting:
