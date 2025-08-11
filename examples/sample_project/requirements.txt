@@ -1,0 +1,20 @@
+
+# Production dependencies
+requests>=2.28.0
+flask>=2.2.0
+sqlalchemy>=1.4.0
+celery>=5.2.0
+redis>=4.3.0
+
+# Development dependencies (with comments)
+pytest>=7.0.0  # Testing framework
+black>=22.0.0   # Code formatter
+flake8>=5.0.0   # Linting
+mypy>=0.991     # Type checking
+
+# Version pinned for stability
+django==4.1.0   # Web framework (pinned for demo - has known CVE)
+numpy==1.23.0   # Scientific computing
+
+# Package with URL
+git+https://github.com/psf/requests.git@main#egg=requests-dev

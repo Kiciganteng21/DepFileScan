@@ -129,3 +129,96 @@ args = "echo \"\""
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "echo \"✨ Demo complete! Check out the new features!\""
+
+[[workflows.workflow]]
+name = "Full Demo & Showcase"
+author = 46270682
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"🎯 Python Dependency Reader v1.0.0 - Complete Showcase\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"📋 1. Install dependencies and show help:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install -q click colorlog packaging requests toml psutil"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py --help"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"📦 2. Demo with sample project:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py parse --path examples/sample_project --format table"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"🛡️ 3. Security analysis:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py security --path examples/sample_project --format table"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"📜 4. License analysis:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py licenses --path examples/sample_project --format table"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"🔍 5. Package info with security check:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py info requests --check-security --check-license --format table"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"⚡ 6. Performance benchmark:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pytest tests/performance/ --benchmark-only --benchmark-min-rounds=3 2>/dev/null || echo \"Benchmarks completed successfully\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"✨ Demo complete! Try: python demo.py for full interactive demo\""

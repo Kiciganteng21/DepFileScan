@@ -1,10 +1,75 @@
 [project]
-name = "repl-nix-workspace"
-version = "0.1.0"
-description = "Add your description here"
+name = "python-dependency-reader"
+version = "1.0.0"
+description = "Comprehensive CLI tool for Python dependency analysis with advanced security and license checking capabilities"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Python Dependency Reader Contributors"}
+]
+maintainers = [
+    {name = "Python Dependency Reader Team"}
+]
+keywords = [
+    "dependency-analysis", 
+    "security", 
+    "license-compliance", 
+    "python", 
+    "requirements", 
+    "vulnerability-scanner",
+    "pypi",
+    "cli-tool"
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Software Distribution",
+    "Topic :: Utilities"
+]
 requires-python = ">=3.11"
 dependencies = [
+    "click>=8.0.0",
+    "colorlog>=6.0.0",
+    "packaging>=21.0.0",
+    "requests>=2.25.0",
+    "toml>=0.10.0",
     "psutil>=7.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
     "pytest>=8.4.1",
     "pytest-benchmark>=5.1.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "flake8>=5.0.0",
+    "mypy>=0.991",
 ]
+docs = [
+    "sphinx>=5.0.0",
+    "sphinx-rtd-theme>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://replit.com/@username/python-dependency-reader"
+Documentation = "https://github.com/username/python-dependency-reader/blob/main/docs/README.md"
+Repository = "https://github.com/username/python-dependency-reader"
+Changelog = "https://github.com/username/python-dependency-reader/blob/main/CHANGELOG.md"
+"Bug Reports" = "https://github.com/username/python-dependency-reader/issues"
+
+[project.scripts]
+dependency-reader = "main:main"
+dep-reader = "main:main"
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
