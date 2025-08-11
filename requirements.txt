@@ -1,0 +1,15 @@
+# Python Dependency Reader v1.0.0
+# Production dependencies
+
+click>=8.0.0
+colorlog>=6.0.0
+packaging>=21.0.0
+requests>=2.25.0
+toml>=0.10.0
+psutil>=7.0.0
+
+# Additional dependencies for full functionality
+urllib3>=1.21.1
+charset-normalizer>=2.0.0
+idna>=2.5
+certifi>=2017.4.17
