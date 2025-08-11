@@ -4,7 +4,7 @@ Python Dependency Reader CLI Tool
 Entry point for the application
 """
 
-from pydepman.cli import main
+from depfilescan.cli import main
 
 if __name__ == "__main__":
     main()
