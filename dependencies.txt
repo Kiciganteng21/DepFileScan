@@ -1,15 +1,48 @@
 # Python Dependencies Analysis
-# Generated on: 2025-08-11 08:01:34
+# Generated on: 2025-08-11 14:17:26
 # Total files analyzed: 1
 
 ## Summary
-Total unique packages found: 1
+Total unique packages found: 12
 
 ## Package Usage
-- dependency_reader (used in 1 file(s))
-  - main.py
+- config (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- dataclasses (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- django (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- fastapi (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- flask (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- numpy (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- pandas (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- pydantic (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- requests (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- sqlalchemy (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- typing (used in 1 file(s))
+  - examples\sample_project\src\main.py
+- utils (used in 1 file(s))
+  - examples\sample_project\src\main.py
 
 ## Detailed Analysis
 
-### main.py
-- dependency_reader
+### examples\sample_project\src\main.py
+- config
+- dataclasses
+- django
+- fastapi
+- flask
+- numpy
+- pandas
+- pydantic
+- requests
+- sqlalchemy
+- typing
+- utils
