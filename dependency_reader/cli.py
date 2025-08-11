@@ -201,37 +201,394 @@ def scan(ctx: click.Context, path: Path, recursive: bool, log: str, format: str,
 @click.argument('package_name')
 @click.option('--format', '-f', type=click.Choice(['json', 'simple']), 
               default='simple', help='Output format')
-def info(package_name: str, format: str) -> None:
-    """Get information about a package from PyPI"""
+@click.option('--check-security', is_flag=True, help='Check for security vulnerabilities')
+@click.option('--check-license', is_flag=True, help='Analyze license compatibility')
+def info(package_name: str, format: str, check_security: bool, check_license: bool) -> None:
+    """Get comprehensive information about a package from PyPI"""
     logger = logging.getLogger(__name__)
     
     try:
         pypi_client = PyPIClient()
-        package_info = pypi_client.get_package_info(package_name)
+        package_data = pypi_client.get_package_info(package_name)
         
-        if not package_info:
+        if not package_data:
             logger.error(f"Package '{package_name}' not found on PyPI")
             return
         
+        package_info = PackageInfo.from_pypi_json(package_data)
+        
         if format == 'json':
-            import json
-            click.echo(json.dumps(package_info, indent=2))
-        else:
-            info_data = package_info.get('info', {})
-            click.echo(f"Package: {info_data.get('name', 'Unknown')}")
-            click.echo(f"Version: {info_data.get('version', 'Unknown')}")
-            click.echo(f"Summary: {info_data.get('summary', 'No summary available')}")
-            click.echo(f"Author: {info_data.get('author', 'Unknown')}")
-            click.echo(f"License: {info_data.get('license', 'Unknown')}")
+            data = {
+                'name': package_info.name,
+                'version': package_info.version,
+                'summary': package_info.summary,
+                'author': package_info.author,
+                'license': package_info.license,
+                'homepage': package_info.homepage,
+                'requires_python': package_info.requires_python,
+                'dependencies': package_info.requires_dist
+            }
             
-            requires_dist = info_data.get('requires_dist', [])
-            if requires_dist:
-                click.echo(f"Dependencies: {', '.join(requires_dist[:5])}")
-                if len(requires_dist) > 5:
-                    click.echo(f"  ... and {len(requires_dist) - 5} more")
+            if check_security:
+                from .security_checker import SecurityChecker
+                security_checker = SecurityChecker()
+                vulnerabilities = security_checker.check_package_vulnerabilities(package_name, package_info.version)
+                data['vulnerabilities'] = [
+                    {
+                        'id': v.vulnerability_id,
+                        'severity': v.severity,
+                        'description': v.description,
+                        'affected_versions': v.affected_versions
+                    }
+                    for v in vulnerabilities
+                ]
+            
+            if check_license:
+                from .license_analyzer import LicenseAnalyzer
+                license_analyzer = LicenseAnalyzer()
+                license_analysis = license_analyzer.analyze_licenses([package_info])
+                data['license_analysis'] = license_analysis
+            
+            click.echo(json.dumps(data, indent=2))
+        else:
+            click.echo(f"📦 Package: {package_info.name}")
+            click.echo(f"🔖 Version: {package_info.version}")
+            click.echo(f"📝 Summary: {package_info.summary or 'No summary available'}")
+            click.echo(f"👤 Author: {package_info.author or 'Unknown'}")
+            click.echo(f"⚖️  License: {package_info.license or 'Unknown'}")
+            click.echo(f"🌐 Homepage: {package_info.homepage or 'Not specified'}")
+            click.echo(f"🐍 Python: {package_info.requires_python or 'Any version'}")
+            
+            if package_info.requires_dist:
+                click.echo(f"📋 Dependencies: {', '.join(package_info.requires_dist[:5])}")
+                if len(package_info.requires_dist) > 5:
+                    click.echo(f"    ... and {len(package_info.requires_dist) - 5} more")
+            
+            # Security check
+            if check_security:
+                click.echo(f"\n🛡️  Security Analysis:")
+                from .security_checker import SecurityChecker
+                security_checker = SecurityChecker()
+                vulnerabilities = security_checker.check_package_vulnerabilities(package_name, package_info.version)
+                
+                if vulnerabilities:
+                    click.echo(f"   ⚠️  Found {len(vulnerabilities)} vulnerability(ies):")
+                    for vuln in vulnerabilities:
+                        click.echo(f"      • {vuln.vulnerability_id} ({vuln.severity}): {vuln.description}")
+                else:
+                    click.echo("   ✅ No known vulnerabilities found")
+            
+            # License analysis
+            if check_license:
+                click.echo(f"\n⚖️  License Analysis:")
+                from .license_analyzer import LicenseAnalyzer
+                license_analyzer = LicenseAnalyzer()
+                license_analysis = license_analyzer.analyze_licenses([package_info])
+                
+                license_info = package_info.license_info
+                if license_info:
+                    click.echo(f"   Type: {license_info.compatibility_level}")
+                    click.echo(f"   Commercial friendly: {'Yes' if license_info.is_commercial_friendly else 'No'}")
+                    click.echo(f"   Copyleft: {'Yes' if license_info.is_copyleft else 'No'}")
     
     except Exception as e:
         logger.error(f"Error fetching package information: {e}")
+
+
+@cli.command()
+@click.option('--path', '-p', type=click.Path(exists=True, path_type=Path), 
+              default=Path('.'), help='Path to analyze')
+@click.option('--recursive', '-r', is_flag=True, help='Analyze recursively')
+@click.option('--output', '-o', type=str, help='Output file for report (HTML/CSV/JSON)')
+@click.option('--check-security', is_flag=True, help='Include security vulnerability analysis')
+@click.option('--check-licenses', is_flag=True, help='Include license compatibility analysis')
+@click.option('--format', '-f', type=click.Choice(['html', 'json', 'csv', 'table']), 
+              default='table', help='Report format')
+@click.pass_context
+def analyze(ctx: click.Context, path: Path, recursive: bool, output: str, 
+           check_security: bool, check_licenses: bool, format: str) -> None:
+    """Comprehensive dependency analysis with security and license checking"""
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from .security_checker import SecurityChecker
+        from .license_analyzer import LicenseAnalyzer
+        from .utils import generate_html_report, export_to_csv
+        
+        logger.info("Starting comprehensive dependency analysis...")
+        
+        # Find and parse dependency files
+        dependency_files = find_dependency_files(path, recursive)
+        
+        if not dependency_files:
+            logger.warning("No dependency files found")
+            return
+        
+        parsed_files = []
+        for file_path in dependency_files:
+            parsed_file = parse_dependency_file(file_path)
+            if parsed_file:
+                parsed_files.append(parsed_file)
+        
+        if not parsed_files:
+            logger.error("No files could be parsed successfully")
+            return
+        
+        # Detect conflicts
+        conflict_detector = ConflictDetector()
+        conflicts = conflict_detector.detect_conflicts(parsed_files)
+        
+        # Collect all packages for analysis
+        all_packages = []
+        unique_packages = set()
+        
+        for dep_file in parsed_files:
+            for dep in dep_file.dependencies:
+                unique_packages.add(dep.name.lower())
+        
+        # Get PyPI information for unique packages
+        pypi_client = PyPIClient()
+        package_infos = []
+        
+        for package_name in unique_packages:
+            try:
+                package_data = pypi_client.get_package_info(package_name)
+                if package_data:
+                    package_info = PackageInfo.from_pypi_json(package_data)
+                    package_infos.append(package_info)
+            except Exception as e:
+                logger.warning(f"Could not fetch info for {package_name}: {e}")
+        
+        # Security analysis
+        vulnerabilities = []
+        if check_security:
+            logger.info("Checking for security vulnerabilities...")
+            security_checker = SecurityChecker()
+            vulnerabilities = security_checker.scan_packages(package_infos)
+        
+        # License analysis
+        license_analysis = {}
+        if check_licenses:
+            logger.info("Analyzing license compatibility...")
+            license_analyzer = LicenseAnalyzer()
+            license_analysis = license_analyzer.analyze_licenses(package_infos)
+        
+        # Create comprehensive report
+        total_deps = sum(len(df.dependencies) for df in parsed_files)
+        dev_deps = sum(len([d for d in df.dependencies if d.is_dev]) for df in parsed_files)
+        prod_deps = total_deps - dev_deps
+        
+        report = ProjectReport(
+            dependency_files=parsed_files,
+            conflicts=conflicts,
+            vulnerabilities=vulnerabilities,
+            license_issues=license_analysis.get('compatibility_issues', []),
+            outdated_packages=[],  # TODO: Implement outdated package detection
+            dependency_tree=None,  # TODO: Implement dependency tree
+            total_packages=total_deps,
+            unique_packages=len(unique_packages),
+            dev_packages=dev_deps,
+            prod_packages=prod_deps
+        )
+        
+        # Display results
+        display_comprehensive_report(report, format)
+        
+        # Save to file if requested
+        if output:
+            output_path = Path(output)
+            if format == 'html' or output_path.suffix.lower() == '.html':
+                generate_html_report(report, output_path)
+                logger.info(f"HTML report saved to {output_path}")
+            elif format == 'json' or output_path.suffix.lower() == '.json':
+                with open(output_path, 'w') as f:
+                    json.dump({
+                        'summary': {
+                            'total_packages': report.total_packages,
+                            'unique_packages': report.unique_packages,
+                            'conflicts': len(report.conflicts),
+                            'vulnerabilities': len(report.vulnerabilities)
+                        },
+                        'files': [{'path': str(df.file_path), 'type': df.file_type, 'deps': len(df.dependencies)} for df in report.dependency_files],
+                        'conflicts': [{'package': c.package_name, 'files': len(c.version_conflicts)} for c in report.conflicts],
+                        'vulnerabilities': [{'package': v.package_name, 'severity': v.severity, 'id': v.vulnerability_id} for v in report.vulnerabilities]
+                    }, f, indent=2)
+                logger.info(f"JSON report saved to {output_path}")
+            elif format == 'csv' or output_path.suffix.lower() == '.csv':
+                all_deps = []
+                for df in report.dependency_files:
+                    all_deps.extend(df.dependencies)
+                export_to_csv(all_deps, output_path)
+                logger.info(f"CSV report saved to {output_path}")
+    
+    except Exception as e:
+        logger.error(f"Error during analysis: {e}")
+        if ctx.obj.get('verbose'):
+            raise
+
+
+@cli.command()
+@click.option('--path', '-p', type=click.Path(exists=True, path_type=Path), 
+              default=Path('.'), help='Path to check for vulnerabilities')
+@click.option('--recursive', '-r', is_flag=True, help='Check recursively')
+@click.option('--severity', type=click.Choice(['low', 'medium', 'high', 'critical']), 
+              help='Filter by minimum severity level')
+def security(path: Path, recursive: bool, severity: str) -> None:
+    """Check dependencies for security vulnerabilities"""
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from .security_checker import SecurityChecker
+        
+        # Find and parse dependency files
+        dependency_files = find_dependency_files(path, recursive)
+        parsed_files = []
+        
+        for file_path in dependency_files:
+            parsed_file = parse_dependency_file(file_path)
+            if parsed_file:
+                parsed_files.append(parsed_file)
+        
+        if not parsed_files:
+            logger.warning("No dependency files found to check")
+            return
+        
+        # Collect unique packages
+        unique_packages = set()
+        for dep_file in parsed_files:
+            for dep in dep_file.dependencies:
+                unique_packages.add(dep.name.lower())
+        
+        # Check vulnerabilities
+        security_checker = SecurityChecker()
+        all_vulnerabilities = []
+        
+        for package_name in unique_packages:
+            vulnerabilities = security_checker.check_package_vulnerabilities(package_name)
+            all_vulnerabilities.extend(vulnerabilities)
+        
+        # Filter by severity if specified
+        if severity:
+            severity_order = {'low': 0, 'medium': 1, 'high': 2, 'critical': 3}
+            min_level = severity_order[severity]
+            all_vulnerabilities = [
+                v for v in all_vulnerabilities 
+                if severity_order.get(v.severity.lower(), 1) >= min_level
+            ]
+        
+        # Display results
+        if all_vulnerabilities:
+            click.echo(f"🛡️  Found {len(all_vulnerabilities)} security vulnerability(ies):\n")
+            
+            for vuln in all_vulnerabilities:
+                severity_color = {
+                    'LOW': 'blue',
+                    'MEDIUM': 'yellow', 
+                    'HIGH': 'magenta',
+                    'CRITICAL': 'red'
+                }.get(vuln.severity, 'white')
+                
+                click.echo(f"📦 {vuln.package_name}")
+                click.echo(f"   ID: {vuln.vulnerability_id}")
+                click.echo(click.style(f"   Severity: {vuln.severity}", fg=severity_color))
+                click.echo(f"   Affected: {vuln.affected_versions}")
+                click.echo(f"   Description: {vuln.description}")
+                if vuln.fixed_version:
+                    click.echo(click.style(f"   Fixed in: {vuln.fixed_version}", fg='green'))
+                click.echo()
+        else:
+            click.echo(click.style("✅ No security vulnerabilities found!", fg='green'))
+    
+    except Exception as e:
+        logger.error(f"Error checking security vulnerabilities: {e}")
+
+
+@cli.command()
+@click.option('--path', '-p', type=click.Path(exists=True, path_type=Path), 
+              default=Path('.'), help='Path to analyze licenses')
+@click.option('--recursive', '-r', is_flag=True, help='Analyze recursively')
+@click.option('--commercial', is_flag=True, help='Show only commercial compatibility issues')
+def licenses(path: Path, recursive: bool, commercial: bool) -> None:
+    """Analyze license compatibility across dependencies"""
+    logger = logging.getLogger(__name__)
+    
+    try:
+        from .license_analyzer import LicenseAnalyzer
+        
+        # Find and parse dependency files
+        dependency_files = find_dependency_files(path, recursive)
+        parsed_files = []
+        
+        for file_path in dependency_files:
+            parsed_file = parse_dependency_file(file_path)
+            if parsed_file:
+                parsed_files.append(parsed_file)
+        
+        if not parsed_files:
+            logger.warning("No dependency files found to analyze")
+            return
+        
+        # Get package information
+        unique_packages = set()
+        for dep_file in parsed_files:
+            for dep in dep_file.dependencies:
+                unique_packages.add(dep.name.lower())
+        
+        pypi_client = PyPIClient()
+        package_infos = []
+        
+        for package_name in unique_packages:
+            try:
+                package_data = pypi_client.get_package_info(package_name)
+                if package_data:
+                    package_info = PackageInfo.from_pypi_json(package_data)
+                    package_infos.append(package_info)
+            except Exception as e:
+                logger.warning(f"Could not fetch license info for {package_name}: {e}")
+        
+        # Analyze licenses
+        license_analyzer = LicenseAnalyzer()
+        license_analysis = license_analyzer.analyze_licenses(package_infos)
+        
+        # Display results
+        click.echo("⚖️  License Analysis Results\n")
+        
+        # Show summary
+        summary = license_analysis['summary']
+        click.echo("📊 License Distribution:")
+        click.echo(f"   Permissive: {summary['permissive']}")
+        click.echo(f"   Weak Copyleft: {summary['weak_copyleft']}")
+        click.echo(f"   Strong Copyleft: {summary['strong_copyleft']}")
+        click.echo(f"   Proprietary: {summary['proprietary']}")
+        click.echo(f"   Unknown: {summary['unknown']}")
+        click.echo()
+        
+        # Show compatibility issues
+        if license_analysis['compatibility_issues']:
+            click.echo(click.style("⚠️  Compatibility Issues:", fg='yellow'))
+            for issue in license_analysis['compatibility_issues']:
+                click.echo(f"   • {issue}")
+            click.echo()
+        
+        # Show commercial issues if requested
+        if commercial or license_analysis['commercial_issues']:
+            click.echo("💼 Commercial Compatibility:")
+            if license_analysis['commercial_issues']:
+                click.echo(click.style("   ⚠️  Non-commercial-friendly packages:", fg='red'))
+                for pkg in license_analysis['commercial_issues']:
+                    click.echo(f"      • {pkg.name} ({pkg.license})")
+            else:
+                click.echo(click.style("   ✅ All packages are commercial-friendly", fg='green'))
+            click.echo()
+        
+        # Show recommendations
+        recommendations = license_analyzer.get_license_recommendations(license_analysis)
+        click.echo("💡 Recommendations:")
+        for rec in recommendations:
+            click.echo(f"   • {rec}")
+    
+    except Exception as e:
+        logger.error(f"Error analyzing licenses: {e}")
 
 
 def find_dependency_files(path: Path, recursive: bool = False) -> List[Path]:
@@ -391,6 +748,113 @@ def display_conflicts(conflicts: List[ConflictReport], format: str) -> None:
                 dev_marker = " [DEV]" if version_info.is_dev else ""
                 version_str = str(version_info.version_spec) if version_info.version_spec else "any version"
                 click.echo(f"    {version_info.file_path}: {version_str}{dev_marker}")
+
+
+def display_comprehensive_report(report: ProjectReport, format: str) -> None:
+    """Display comprehensive project report"""
+    if format == 'json':
+        data = {
+            'summary': {
+                'total_packages': report.total_packages,
+                'unique_packages': report.unique_packages,
+                'dev_packages': report.dev_packages,
+                'prod_packages': report.prod_packages,
+                'conflicts': len(report.conflicts),
+                'vulnerabilities': len(report.vulnerabilities),
+                'license_issues': len(report.license_issues)
+            },
+            'dependency_files': [
+                {
+                    'path': str(df.file_path),
+                    'type': df.file_type,
+                    'dependencies': len(df.dependencies)
+                }
+                for df in report.dependency_files
+            ],
+            'conflicts': [
+                {
+                    'package': c.package_name,
+                    'files': [str(vc.file_path) for vc in c.version_conflicts]
+                }
+                for c in report.conflicts
+            ],
+            'vulnerabilities': [
+                {
+                    'package': v.package_name,
+                    'severity': v.severity,
+                    'id': v.vulnerability_id,
+                    'description': v.description
+                }
+                for v in report.vulnerabilities
+            ]
+        }
+        click.echo(json.dumps(data, indent=2))
+        return
+    
+    # Rich text display
+    click.echo("🔍 Comprehensive Dependency Analysis Report")
+    click.echo("=" * 50)
+    
+    # Summary section
+    click.echo(f"\n📊 Summary:")
+    click.echo(f"   Total packages: {report.total_packages}")
+    click.echo(f"   Unique packages: {report.unique_packages}")
+    click.echo(f"   Production: {report.prod_packages}")
+    click.echo(f"   Development: {report.dev_packages}")
+    click.echo(f"   Files analyzed: {len(report.dependency_files)}")
+    
+    # Status indicators
+    status_line = "   Status: "
+    if report.conflicts:
+        status_line += click.style(f"⚠️  {len(report.conflicts)} conflicts ", fg='yellow')
+    if report.vulnerabilities:
+        status_line += click.style(f"🛡️  {len(report.vulnerabilities)} vulnerabilities ", fg='red')
+    if report.license_issues:
+        status_line += click.style(f"⚖️  {len(report.license_issues)} license issues ", fg='magenta')
+    
+    if not (report.conflicts or report.vulnerabilities or report.license_issues):
+        status_line += click.style("✅ All clear", fg='green')
+    
+    click.echo(status_line)
+    
+    # Dependency files section
+    click.echo(f"\n📁 Dependency Files:")
+    for df in report.dependency_files:
+        click.echo(f"   • {df.file_path} ({df.file_type}) - {len(df.dependencies)} deps")
+    
+    # Conflicts section
+    if report.conflicts:
+        click.echo(f"\n⚠️  Version Conflicts:")
+        for conflict in report.conflicts:
+            click.echo(f"   📦 {conflict.package_name}:")
+            for vc in conflict.version_conflicts:
+                version_str = str(vc.version_spec) if vc.version_spec else "any"
+                dev_str = " [DEV]" if vc.is_dev else ""
+                click.echo(f"      • {vc.file_path}: {version_str}{dev_str}")
+    
+    # Vulnerabilities section
+    if report.vulnerabilities:
+        click.echo(f"\n🛡️  Security Vulnerabilities:")
+        # Group by severity
+        by_severity = {}
+        for vuln in report.vulnerabilities:
+            by_severity.setdefault(vuln.severity, []).append(vuln)
+        
+        for severity in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']:
+            vulns = by_severity.get(severity, [])
+            if vulns:
+                color = {'CRITICAL': 'red', 'HIGH': 'magenta', 'MEDIUM': 'yellow', 'LOW': 'blue'}.get(severity, 'white')
+                click.echo(click.style(f"   {severity}: {len(vulns)} vulnerability(ies)", fg=color))
+                for vuln in vulns[:3]:  # Show first 3
+                    click.echo(f"      • {vuln.package_name}: {vuln.vulnerability_id}")
+                if len(vulns) > 3:
+                    click.echo(f"      ... and {len(vulns) - 3} more")
+    
+    # License issues section
+    if report.license_issues:
+        click.echo(f"\n⚖️  License Issues:")
+        for issue in report.license_issues:
+            click.echo(f"   • {issue}")
 
 
 def save_dependencies_to_log(dependency_files: List[DependencyFile], log_filename: str, scanner) -> Path:

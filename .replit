@@ -39,3 +39,92 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "pip install click colorlog packaging requests toml && python main.py --help"
+
+[[workflows.workflow]]
+name = "Demo Enhanced Features"
+author = 46270682
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"🚀 Python Dependency Reader - Enhanced Demo\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"1. Basic dependency analysis with enhanced output:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py parse --format table"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"2. Comprehensive analysis with security and license checking:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py analyze --check-security --check-licenses --format table"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"3. Security vulnerability check:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py security"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"4. License compatibility analysis:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py licenses"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"5. Enhanced package info with security and license data:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py info requests --check-security --check-license"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"6. Generate HTML report:\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python main.py analyze --output analysis_report.html --format html --check-security --check-licenses"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"\""
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "echo \"✨ Demo complete! Check out the new features!\""

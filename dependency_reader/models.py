@@ -102,6 +102,36 @@ class ConflictReport:
 
 
 @dataclass
+class SecurityVulnerability:
+    """Represents a security vulnerability"""
+    package_name: str
+    affected_versions: str
+    vulnerability_id: str
+    severity: str
+    description: str
+    fixed_version: Optional[str] = None
+
+
+@dataclass
+class LicenseInfo:
+    """Represents license information"""
+    license_name: str
+    is_commercial_friendly: bool
+    is_copyleft: bool
+    compatibility_level: str  # "permissive", "weak_copyleft", "strong_copyleft", "proprietary"
+
+
+@dataclass
+class DependencyNode:
+    """Represents a node in the dependency tree"""
+    name: str
+    version: Optional[str]
+    dependencies: List['DependencyNode']
+    is_dev: bool = False
+    depth: int = 0
+
+
+@dataclass
 class PackageInfo:
     """Represents package information from PyPI"""
     name: str
@@ -113,6 +143,14 @@ class PackageInfo:
     homepage: Optional[str]
     requires_dist: List[str]
     requires_python: Optional[str]
+    download_count: Optional[int] = None
+    last_updated: Optional[str] = None
+    vulnerabilities: List[SecurityVulnerability] = None
+    license_info: Optional[LicenseInfo] = None
+    
+    def __post_init__(self):
+        if self.vulnerabilities is None:
+            self.vulnerabilities = []
     
     @classmethod
     def from_pypi_json(cls, pypi_data: dict) -> 'PackageInfo':
@@ -128,5 +166,22 @@ class PackageInfo:
             license=info.get('license'),
             homepage=info.get('home_page'),
             requires_dist=info.get('requires_dist', []) or [],
-            requires_python=info.get('requires_python')
+            requires_python=info.get('requires_python'),
+            download_count=info.get('downloads', {}).get('last_month'),
+            last_updated=info.get('upload_time')
         )
+
+
+@dataclass
+class ProjectReport:
+    """Comprehensive project analysis report"""
+    dependency_files: List[DependencyFile]
+    conflicts: List[ConflictReport]
+    vulnerabilities: List[SecurityVulnerability]
+    license_issues: List[str]
+    outdated_packages: List[str]
+    dependency_tree: Optional[DependencyNode]
+    total_packages: int
+    unique_packages: int
+    dev_packages: int
+    prod_packages: int

@@ -2,144 +2,58 @@
 Utility functions for the dependency reader
 """
 
+import csv
+import json
 import logging
 import sys
-import json
-from typing import List, Dict, Any
+from datetime import datetime
 from pathlib import Path
+from typing import Dict, List, Optional, Any
 
 import colorlog
-import click
+from packaging.specifiers import SpecifierSet
 
-from .models import DependencyFile, Dependency, ConflictReport
+from .models import Dependency, DependencyFile, ConflictReport, ProjectReport, LicenseInfo
 
 
-def setup_logging(verbose: bool = False) -> None:
+def setup_logging(verbose: bool = False, log_file: Optional[Path] = None) -> None:
     """Setup logging configuration"""
     log_level = logging.DEBUG if verbose else logging.INFO
-    
-    # Create colored formatter
-    formatter = colorlog.ColoredFormatter(
+
+    # Create formatter
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+
+    # Setup console handler with color
+    console_handler = colorlog.StreamHandler()
+    console_handler.setFormatter(colorlog.ColoredFormatter(
         '%(log_color)s%(levelname)-8s%(reset)s %(blue)s%(name)s%(reset)s: %(message)s',
-        datefmt=None,
-        reset=True,
         log_colors={
             'DEBUG': 'cyan',
             'INFO': 'green',
             'WARNING': 'yellow',
             'ERROR': 'red',
             'CRITICAL': 'red,bg_white',
-        },
-        secondary_log_colors={},
-        style='%'
-    )
-    
-    # Setup handler
-    handler = colorlog.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-    
-    # Setup root logger
+        }
+    ))
+
+    # Get root logger
     logger = logging.getLogger()
     logger.setLevel(log_level)
-    logger.addHandler(handler)
+    logger.addHandler(console_handler)
+
+    # Add file handler if log file specified
+    if log_file:
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
 
 
-def format_dependencies(dependency_files: List[DependencyFile], format_type: str = 'table') -> str:
+def format_dependencies(dependencies: List[Dependency], format_type: str = "simple") -> str:
     """Format dependencies for display"""
-    if format_type == 'json':
-        data = {}
-        for dep_file in dependency_files:
-            data[str(dep_file.file_path)] = {
-                'type': dep_file.file_type,
-                'dependencies': [
-                    {
-                        'name': dep.name,
-                        'version_spec': str(dep.version_spec) if dep.version_spec else None,
-                        'is_dev': dep.is_dev,
-                        'extras': dep.extras
-                    }
-                    for dep in dep_file.dependencies
-                ]
-            }
-        return json.dumps(data, indent=2)
-    
-    elif format_type == 'table':
-        output = []
-        for dep_file in dependency_files:
-            output.append(f"\n=== {dep_file.file_path} ({dep_file.file_type}) ===")
-            
-            if not dep_file.dependencies:
-                output.append("No dependencies found")
-                continue
-            
-            # Group by dev/prod
-            prod_deps = [d for d in dep_file.dependencies if not d.is_dev]
-            dev_deps = [d for d in dep_file.dependencies if d.is_dev]
-            
-            if prod_deps:
-                output.append("\nProduction Dependencies:")
-                for dep in prod_deps:
-                    version_str = f" {dep.version_spec}" if dep.version_spec else ""
-                    extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
-                    output.append(f"  • {dep.name}{extras_str}{version_str}")
-            
-            if dev_deps:
-                output.append("\nDevelopment Dependencies:")
-                for dep in dev_deps:
-                    version_str = f" {dep.version_spec}" if dep.version_spec else ""
-                    extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
-                    output.append(f"  • {dep.name}{extras_str}{version_str}")
-        
-        return '\n'.join(output)
-    
-    else:  # simple format
-        output = []
-        for dep_file in dependency_files:
-            output.append(f"\n{dep_file.file_path} ({dep_file.file_type}):")
-            for dep in dep_file.dependencies:
-                dev_marker = " [DEV]" if dep.is_dev else ""
-                version_str = f" {dep.version_spec}" if dep.version_spec else ""
-                output.append(f"  {dep.name}{version_str}{dev_marker}")
-        
-        return '\n'.join(output)
-
-
-def format_conflicts(conflicts: List[ConflictReport], format_type: str = 'table') -> str:
-    """Format conflicts for display"""
-    if format_type == 'json':
-        data = []
-        for conflict in conflicts:
-            data.append({
-                'package': conflict.package_name,
-                'conflicts': [
-                    {
-                        'file': str(version_info.file_path),
-                        'version_spec': str(version_info.version_spec) if version_info.version_spec else None,
-                        'is_dev': version_info.is_dev
-                    }
-                    for version_info in conflict.version_conflicts
-                ]
-            })
-        return json.dumps(data, indent=2)
-    else:
-        output = []
-        for conflict in conflicts:
-            output.append(f"\n• {conflict.package_name}:")
-            for version_info in conflict.version_conflicts:
-                dev_marker = " [DEV]" if version_info.is_dev else ""
-                version_str = str(version_info.version_spec) if version_info.version_spec else "any version"
-                output.append(f"    {version_info.file_path}: {version_str}{dev_marker}")
-        
-        return '\n'.join(output)
-
-
-def format_dependencies(dependencies: List[Dependency], format_type: str = "table") -> str:
-    """Format dependencies for display"""
-    if not dependencies:
-        return "No dependencies found"
-    
     if format_type == "json":
-        import json
         data = []
         for dep in dependencies:
             data.append({
@@ -149,46 +63,36 @@ def format_dependencies(dependencies: List[Dependency], format_type: str = "tabl
                 'is_dev': dep.is_dev
             })
         return json.dumps(data, indent=2)
-    
+
     elif format_type == "table":
-        # Group by dev/prod
-        prod_deps = [d for d in dependencies if not d.is_dev]
-        dev_deps = [d for d in dependencies if d.is_dev]
-        
-        result = []
-        
-        if prod_deps:
-            result.append("Production Dependencies:")
-            for dep in sorted(prod_deps, key=lambda x: x.name.lower()):
-                version_str = f" {dep.version_spec}" if dep.version_spec else ""
-                extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
-                result.append(f"  • {dep.name}{extras_str}{version_str}")
-        
-        if dev_deps:
-            if result:
-                result.append("")
-            result.append("Development Dependencies:")
-            for dep in sorted(dev_deps, key=lambda x: x.name.lower()):
-                version_str = f" {dep.version_spec}" if dep.version_spec else ""
-                extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
-                result.append(f"  • {dep.name}{extras_str}{version_str}")
-        
-        return "\n".join(result)
-    
+        # Enhanced table format with Unicode box drawing
+        lines = ["┌─────────────────────┬─────────────────┬──────────┬──────────┐"]
+        lines.append("│ Package             │ Version         │ Type     │ Extras   │")
+        lines.append("├─────────────────────┼─────────────────┼──────────┼──────────┤")
+
+        for dep in dependencies:
+            name = dep.name[:19].ljust(19)
+            version_str = (str(dep.version_spec) if dep.version_spec else "any")[:15].ljust(15)
+            dep_type = ("dev" if dep.is_dev else "prod").ljust(8)
+            extras = ",".join(dep.extras)[:8].ljust(8)
+            lines.append(f"│ {name} │ {version_str} │ {dep_type} │ {extras} │")
+
+        lines.append("└─────────────────────┴─────────────────┴──────────┴──────────┘")
+        return "\n".join(lines)
+
     else:  # simple format
-        result = []
-        for dep in sorted(dependencies, key=lambda x: x.name.lower()):
-            result.append(str(dep))
-        return "\n".join(result)
+        lines = []
+        for dep in dependencies:
+            version_str = f" {dep.version_spec}" if dep.version_spec else ""
+            dev_str = " [DEV]" if dep.is_dev else ""
+            extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
+            lines.append(f"{dep.name}{extras_str}{version_str}{dev_str}")
+        return "\n".join(lines)
 
 
-def format_conflicts(conflicts: List[ConflictReport], format_type: str = "table") -> str:
+def format_conflicts(conflicts: List[ConflictReport], format_type: str = "simple") -> str:
     """Format conflicts for display"""
-    if not conflicts:
-        return "No conflicts found"
-    
     if format_type == "json":
-        import json
         data = []
         for conflict in conflicts:
             data.append({
@@ -196,7 +100,6 @@ def format_conflicts(conflicts: List[ConflictReport], format_type: str = "table"
                 'conflicts': [
                     {
                         'file': str(vc.file_path),
-                        'file_type': vc.file_type,
                         'version_spec': str(vc.version_spec) if vc.version_spec else None,
                         'is_dev': vc.is_dev
                     }
@@ -204,125 +107,181 @@ def format_conflicts(conflicts: List[ConflictReport], format_type: str = "table"
                 ]
             })
         return json.dumps(data, indent=2)
-    
-    else:  # table or simple format
-        result = []
+
+    else:
+        lines = []
         for conflict in conflicts:
-            result.append(f"• {conflict.package_name}:")
-            for version_conflict in conflict.version_conflicts:
-                version_str = str(version_conflict.version_spec) if version_conflict.version_spec else "any version"
-                dev_str = " [DEV]" if version_conflict.is_dev else ""
-                result.append(f"    {version_conflict.file_path}: {version_str}{dev_str}")
-            result.append("")  # Empty line between conflicts
-        
-        return "\n".join(result)
+            lines.append(f"⚠️  Conflict for {conflict.package_name}:")
+            for vc in conflict.version_conflicts:
+                version_str = str(vc.version_spec) if vc.version_spec else "any version"
+                dev_str = " [DEV]" if vc.is_dev else ""
+                lines.append(f"   📄 {vc.file_path}: {version_str}{dev_str}")
+            lines.append("")  # Empty line between conflicts
+        return "\n".join(lines)
 
 
-def validate_dependency_file(file_path: Path) -> bool:
-    """Validate that a file exists and is readable"""
-    if not file_path.exists():
-        return False
-    
-    if not file_path.is_file():
-        return False
-    
-    try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            f.read(1)  # Try to read at least one character
-        return True
-    except (OSError, UnicodeDecodeError):
-        return False
+def generate_html_report(report: ProjectReport, output_path: Path) -> None:
+    """Generate comprehensive HTML report"""
+    html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dependency Analysis Report</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; margin: 20px; }}
+        .header {{ background: #f0f0f0; padding: 20px; border-radius: 5px; }}
+        .section {{ margin: 20px 0; }}
+        .vulnerability {{ background: #ffebee; padding: 10px; margin: 5px 0; border-left: 4px solid #f44336; }}
+        .conflict {{ background: #fff3e0; padding: 10px; margin: 5px 0; border-left: 4px solid #ff9800; }}
+        .stats {{ display: flex; gap: 20px; }}
+        .stat-box {{ background: #e3f2fd; padding: 15px; border-radius: 5px; text-align: center; }}
+        table {{ border-collapse: collapse; width: 100%; }}
+        th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+        th {{ background-color: #f2f2f2; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Dependency Analysis Report</h1>
+        <p>Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    </div>
+
+    <div class="section">
+        <h2>📈 Summary</h2>
+        <div class="stats">
+            <div class="stat-box">
+                <h3>{report.total_packages}</h3>
+                <p>Total Packages</p>
+            </div>
+            <div class="stat-box">
+                <h3>{report.unique_packages}</h3>
+                <p>Unique Packages</p>
+            </div>
+            <div class="stat-box">
+                <h3>{len(report.conflicts)}</h3>
+                <p>Conflicts</p>
+            </div>
+            <div class="stat-box">
+                <h3>{len(report.vulnerabilities)}</h3>
+                <p>Vulnerabilities</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔍 Dependency Files</h2>
+        <table>
+            <tr><th>File</th><th>Type</th><th>Dependencies</th></tr>
+            {''.join(f'<tr><td>{df.file_path}</td><td>{df.file_type}</td><td>{len(df.dependencies)}</td></tr>' for df in report.dependency_files)}
+        </table>
+    </div>
+
+    {'<div class="section"><h2>⚠️ Conflicts</h2>' + ''.join(f'<div class="conflict"><strong>{c.package_name}</strong><br>' + '<br>'.join(f'{vc.file_path}: {vc.version_spec}' for vc in c.version_conflicts) + '</div>' for c in report.conflicts) + '</div>' if report.conflicts else ''}
+
+    {'<div class="section"><h2>🛡️ Vulnerabilities</h2>' + ''.join(f'<div class="vulnerability"><strong>{v.package_name}</strong> - {v.severity}<br>{v.description}</div>' for v in report.vulnerabilities) + '</div>' if report.vulnerabilities else ''}
+
+</body>
+</html>
+"""
+
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+
+def export_to_csv(dependencies: List[Dependency], output_path: Path) -> None:
+    """Export dependencies to CSV format"""
+    with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Package', 'Version', 'Type', 'Extras'])
+
+        for dep in dependencies:
+            writer.writerow([
+                dep.name,
+                str(dep.version_spec) if dep.version_spec else '',
+                'dev' if dep.is_dev else 'prod',
+                ','.join(dep.extras)
+            ])
 
 
 def normalize_package_name(name: str) -> str:
-    """Normalize package name according to PEP 508"""
-    # Convert to lowercase and replace underscores/hyphens
+    """Normalize package name following PEP 508"""
     import re
-    return re.sub(r'[-_.]+', '-', name.lower())
+    return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def compare_versions(version1: str, version2: str) -> int:
-    """Compare two version strings"""
+def parse_version_spec(version_string: str) -> Optional[SpecifierSet]:
+    """Parse version specification string"""
+    if not version_string or version_string == "*":
+        return None
+
     try:
-        from packaging.version import Version
-        v1 = Version(version1)
-        v2 = Version(version2)
-        
-        if v1 < v2:
-            return -1
-        elif v1 > v2:
-            return 1
-        else:
-            return 0
+        return SpecifierSet(version_string)
     except Exception:
-        # Fallback to string comparison
-        if version1 < version2:
-            return -1
-        elif version1 > version2:
-            return 1
-        else:
-            return 0
+        return None
 
 
-def get_file_type_from_path(file_path: Path) -> str:
-    """Determine file type from file path"""
-    filename = file_path.name.lower()
-    
-    if filename == "requirements.txt":
-        return "requirements.txt"
-    elif filename == "pipfile":
-        return "Pipfile"
-    elif filename == "pyproject.toml":
-        return "pyproject.toml"
-    elif filename.endswith(".txt") and "requirement" in filename:
-        return "requirements.txt"
-    else:
-        return "unknown"
+def validate_version_compatibility(spec1: SpecifierSet, spec2: SpecifierSet) -> bool:
+    """Check if two version specifications are compatible"""
+    if not spec1 or not spec2:
+        return True
+
+    # For now, simple check - in practice would need more sophisticated logic
+    return str(spec1) == str(spec2)
 
 
-def merge_dependencies(deps1: List[Dependency], deps2: List[Dependency]) -> List[Dependency]:
-    """Merge two lists of dependencies, handling duplicates"""
-    merged = {}
-    
-    # Add all dependencies from first list
-    for dep in deps1:
-        key = (dep.name.lower(), dep.is_dev)
-        merged[key] = dep
-    
-    # Add dependencies from second list, updating if newer or more specific
-    for dep in deps2:
-        key = (dep.name.lower(), dep.is_dev)
-        if key not in merged:
-            merged[key] = dep
-        else:
-            # Keep the more specific version if possible
-            existing = merged[key]
-            if existing.version_spec is None and dep.version_spec is not None:
-                merged[key] = dep
-            elif dep.extras and not existing.extras:
-                merged[key] = dep
-    
-    return list(merged.values())
+def get_license_info(license_string: str) -> LicenseInfo:
+    """Get license compatibility information"""
+    license_lower = license_string.lower() if license_string else ""
+
+    # Common permissive licenses
+    if any(lic in license_lower for lic in ['mit', 'bsd', 'apache', 'isc']):
+        return LicenseInfo(
+            license_name=license_string,
+            is_commercial_friendly=True,
+            is_copyleft=False,
+            compatibility_level="permissive"
+        )
+
+    # Weak copyleft
+    if any(lic in license_lower for lic in ['lgpl', 'mpl']):
+        return LicenseInfo(
+            license_name=license_string,
+            is_commercial_friendly=True,
+            is_copyleft=True,
+            compatibility_level="weak_copyleft"
+        )
+
+    # Strong copyleft
+    if any(lic in license_lower for lic in ['gpl', 'agpl']):
+        return LicenseInfo(
+            license_name=license_string,
+            is_commercial_friendly=False,
+            is_copyleft=True,
+            compatibility_level="strong_copyleft"
+        )
+
+    # Default unknown
+    return LicenseInfo(
+        license_name=license_string or "Unknown",
+        is_commercial_friendly=False,
+        is_copyleft=False,
+        compatibility_level="unknown"
+    )
 
 
-def create_summary_report(dependency_files: List[DependencyFile], conflicts: List[ConflictReport]) -> Dict[str, Any]:
-    """Create a summary report of all parsed information"""
-    total_deps = sum(len(df.dependencies) for df in dependency_files)
-    total_prod_deps = sum(len(df.get_production_dependencies()) for df in dependency_files)
-    total_dev_deps = sum(len(df.get_dev_dependencies()) for df in dependency_files)
-    
-    # Find unique packages across all files
-    all_packages = set()
-    for df in dependency_files:
-        all_packages.update(df.get_dependency_names())
-    
-    return {
-        'total_files': len(dependency_files),
-        'file_types': [df.file_type for df in dependency_files],
-        'total_dependencies': total_deps,
-        'production_dependencies': total_prod_deps,
-        'development_dependencies': total_dev_deps,
-        'unique_packages': len(all_packages),
-        'conflicts_found': len(conflicts),
-        'conflicted_packages': [c.package_name for c in conflicts]
-    }
+def suggest_conflict_resolution(conflict: ConflictReport) -> List[str]:
+    """Suggest resolution strategies for conflicts"""
+    suggestions = []
+
+    if conflict.has_dev_prod_conflicts():
+        suggestions.append("Consider moving the package to either production or development dependencies only")
+
+    if conflict.has_version_conflicts():
+        # Find the most restrictive version
+        version_specs = [vc.version_spec for vc in conflict.version_conflicts if vc.version_spec]
+        if version_specs:
+            suggestions.append(f"Try using a version that satisfies all constraints: {' and '.join(str(spec) for spec in version_specs)}")
+
+    suggestions.append("Consider using dependency resolution tools like pip-tools or pipenv")
+
+    return suggestions
