@@ -26,7 +26,7 @@ class PipfileParser:
                 import pipfile
                 pf = pipfile.load(str(file_path))
                 pipfile_data = pf.data
-                self.logger.debug(f"Using pipfile library, parsed sections: {list(pipfile_data.keys())}")
+                self.logger.debug(f"Using pipfile library, parsed sections: {list(pipfile_data.keys()) if pipfile_data else []}")
             except ImportError:
                 self.logger.warning("pipfile library not available, using manual parsing")
                 pipfile_data = self._manual_parse_pipfile(file_path)
