@@ -76,7 +76,7 @@
   
   <!-- Output Layer -->
   <rect x="50" y="460" width="700" height="80" class="box"/>
-  <text x="400" y="485" text-anchor="middle" class="dark-text">Output Formats & Logging</text>
+  <text x="400" y="485" text-anchor="middle" class="dark-text">Output Formats &amp; Logging</text>
   <text x="100" y="505" class="dark-text">JSON</text>
   <text x="200" y="505" class="dark-text">Table</text>
   <text x="300" y="505" class="dark-text">Simple</text>
