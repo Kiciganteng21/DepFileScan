@@ -181,3 +181,60 @@ class ConflictDetector:
                 return not self._are_compatible_specs(valid_specs)
         
         return False
+"""
+Conflict detection for dependencies across multiple files
+"""
+
+import logging
+from typing import List, Dict, Set
+from collections import defaultdict
+
+from .models import DependencyFile, Dependency, ConflictReport, VersionConflict
+
+
+class ConflictDetector:
+    """Detects conflicts between dependencies across multiple files"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+    
+    def detect_conflicts(self, dependency_files: List[DependencyFile]) -> List[ConflictReport]:
+        """Detect conflicts between dependency files"""
+        self.logger.debug(f"Checking for conflicts across {len(dependency_files)} files")
+        
+        # Group dependencies by package name
+        package_occurrences: Dict[str, List[tuple]] = defaultdict(list)
+        
+        for dep_file in dependency_files:
+            for dep in dep_file.dependencies:
+                package_occurrences[dep.name.lower()].append((dep_file, dep))
+        
+        conflicts = []
+        
+        for package_name, occurrences in package_occurrences.items():
+            if len(occurrences) > 1:
+                conflict_report = self._analyze_package_conflicts(package_name, occurrences)
+                if conflict_report and (conflict_report.has_version_conflicts() or 
+                                      conflict_report.has_dev_prod_conflicts()):
+                    conflicts.append(conflict_report)
+        
+        self.logger.info(f"Found {len(conflicts)} package conflicts")
+        return conflicts
+    
+    def _analyze_package_conflicts(self, package_name: str, occurrences: List[tuple]) -> ConflictReport:
+        """Analyze conflicts for a specific package"""
+        version_conflicts = []
+        
+        for dep_file, dependency in occurrences:
+            version_conflict = VersionConflict(
+                file_path=dep_file.file_path,
+                file_type=dep_file.file_type,
+                version_spec=dependency.version_spec,
+                is_dev=dependency.is_dev
+            )
+            version_conflicts.append(version_conflict)
+        
+        return ConflictReport(
+            package_name=package_name,
+            version_conflicts=version_conflicts
+        )

@@ -226,3 +226,185 @@ class PythonScanner:
                 package_files[dependency.name].append(dep_file.file_path)
         
         return package_files
+"""
+Python source code scanner for extracting dependencies from import statements
+"""
+
+import ast
+import logging
+import sys
+from pathlib import Path
+from typing import List, Set, Dict, Optional
+from collections import defaultdict
+
+from .models import DependencyFile, Dependency
+
+
+class PythonScanner:
+    """Scans Python source files to extract dependencies from import statements"""
+    
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        self.stdlib_modules = self._get_stdlib_modules()
+    
+    def scan_file(self, file_path: Path) -> Optional[DependencyFile]:
+        """Scan a single Python file for dependencies"""
+        self.logger.debug(f"Scanning Python file: {file_path}")
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                source_code = f.read()
+            
+            # Parse the AST
+            try:
+                tree = ast.parse(source_code, filename=str(file_path))
+            except SyntaxError as e:
+                self.logger.warning(f"Syntax error in {file_path}: {e}")
+                return None
+            
+            # Extract imports
+            imports = self._extract_imports_from_ast(tree)
+            
+            # Filter out standard library modules
+            external_imports = self._filter_external_imports(imports)
+            
+            # Convert to dependencies
+            dependencies = [
+                Dependency(name=pkg, version_spec=None, extras=[], is_dev=False)
+                for pkg in sorted(external_imports)
+            ]
+            
+            self.logger.debug(f"Found {len(dependencies)} external dependencies in {file_path}")
+            
+            return DependencyFile(
+                file_path=file_path,
+                file_type="python",
+                dependencies=dependencies
+            )
+        
+        except Exception as e:
+            self.logger.warning(f"Error scanning Python file {file_path}: {e}")
+            return None
+    
+    def scan_directory(self, directory: Path, recursive: bool = False) -> List[DependencyFile]:
+        """Scan a directory for Python files and extract dependencies"""
+        self.logger.debug(f"Scanning directory: {directory} (recursive: {recursive})")
+        
+        dependency_files = []
+        
+        # Find Python files
+        if recursive:
+            python_files = directory.rglob("*.py")
+        else:
+            python_files = directory.glob("*.py")
+        
+        for py_file in python_files:
+            # Skip common directories and files
+            if self._should_skip_file(py_file):
+                continue
+            
+            dependency_file = self.scan_file(py_file)
+            if dependency_file and dependency_file.dependencies:
+                dependency_files.append(dependency_file)
+        
+        self.logger.info(f"Scanned {len(dependency_files)} Python files with dependencies")
+        return dependency_files
+    
+    def merge_dependencies_by_package(self, dependency_files: List[DependencyFile]) -> Dict[str, List[Path]]:
+        """Merge dependencies by package name and return which files use each package"""
+        package_files: Dict[str, List[Path]] = defaultdict(list)
+        
+        for dep_file in dependency_files:
+            for dep in dep_file.dependencies:
+                package_files[dep.name].append(dep_file.file_path)
+        
+        return dict(package_files)
+    
+    def _extract_imports_from_ast(self, tree: ast.AST) -> Set[str]:
+        """Extract import statements from AST"""
+        imports = set()
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    imports.add(alias.name.split('.')[0])
+            
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    imports.add(node.module.split('.')[0])
+        
+        return imports
+    
+    def _filter_external_imports(self, imports: Set[str]) -> Set[str]:
+        """Filter out standard library and builtin modules"""
+        external_imports = set()
+        
+        for module_name in imports:
+            if not self._is_stdlib_module(module_name):
+                external_imports.add(module_name)
+        
+        return external_imports
+    
+    def _is_stdlib_module(self, module_name: str) -> bool:
+        """Check if a module is part of the standard library"""
+        if module_name in self.stdlib_modules:
+            return True
+        
+        # Additional heuristics
+        if module_name in sys.builtin_module_names:
+            return True
+        
+        return False
+    
+    def _get_stdlib_modules(self) -> Set[str]:
+        """Get a set of standard library module names"""
+        # Basic set of common stdlib modules
+        # This is not exhaustive but covers the most common ones
+        stdlib_modules = {
+            'os', 'sys', 'json', 'urllib', 'http', 'html', 'xml', 'email',
+            'datetime', 'time', 'calendar', 'collections', 'heapq', 'bisect',
+            'array', 'weakref', 'types', 'copy', 'pprint', 'reprlib', 'enum',
+            'numbers', 'math', 'cmath', 'decimal', 'fractions', 'random',
+            'statistics', 'itertools', 'functools', 'operator', 'pathlib',
+            'os.path', 'fileinput', 'stat', 'filecmp', 'tempfile', 'glob',
+            'fnmatch', 'linecache', 'shutil', 'pickle', 'copyreg', 'shelve',
+            'marshal', 'dbm', 'sqlite3', 'zlib', 'gzip', 'bz2', 'lzma',
+            'zipfile', 'tarfile', 'csv', 'configparser', 'netrc', 'xdrlib',
+            'plistlib', 'hashlib', 'hmac', 'secrets', 're', 'string',
+            'textwrap', 'unicodedata', 'stringprep', 'readline', 'rlcompleter',
+            'struct', 'codecs', 'io', 'argparse', 'getopt', 'logging',
+            'getpass', 'curses', 'platform', 'errno', 'ctypes', 'threading',
+            'multiprocessing', 'concurrent', 'subprocess', 'sched', 'queue',
+            'select', 'dummy_threading', 'thread', '_thread', 'socketserver',
+            'socket', 'ssl', 'asyncio', 'signal', 'warnings', 'contextlib',
+            'abc', 'atexit', 'traceback', 'gc', 'inspect', 'site', 'code',
+            'codeop', 'zipimport', 'pkgutil', 'modulefinder', 'runpy',
+            'importlib', 'parser', 'ast', 'symtable', 'symbol', 'token',
+            'keyword', 'tokenize', 'tabnanny', 'pyclbr', 'py_compile',
+            'compileall', 'dis', 'pickletools', 'formatter', 'msilib',
+            'msvcrt', 'winreg', 'winsound', 'posix', 'pwd', 'spwd', 'grp',
+            'crypt', 'termios', 'tty', 'pty', 'fcntl', 'pipes', 'resource',
+            'nis', 'syslog', 'optparse', 'imp'
+        }
+        
+        return stdlib_modules
+    
+    def _should_skip_file(self, file_path: Path) -> bool:
+        """Check if a file should be skipped during scanning"""
+        # Skip files in common ignore directories
+        ignore_dirs = {
+            '.git', '.tox', '.venv', 'venv', 'env', '__pycache__',
+            'node_modules', '.pytest_cache', 'build', 'dist', '.eggs',
+            '.mypy_cache', '.coverage', 'htmlcov'
+        }
+        
+        # Check if any parent directory is in ignore list
+        for parent in file_path.parents:
+            if parent.name in ignore_dirs:
+                return True
+        
+        # Skip test files (optional, can be configured)
+        if 'test' in file_path.name.lower() or file_path.name.startswith('test_'):
+            return False  # Don't skip test files by default
+        
+        return False

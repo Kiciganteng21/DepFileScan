@@ -4,10 +4,12 @@ Utility functions for the dependency reader
 
 import logging
 import sys
+import json
 from typing import List, Dict, Any
 from pathlib import Path
 
 import colorlog
+import click
 
 from .models import DependencyFile, Dependency, ConflictReport
 
@@ -40,6 +42,95 @@ def setup_logging(verbose: bool = False) -> None:
     logger = logging.getLogger()
     logger.setLevel(log_level)
     logger.addHandler(handler)
+
+
+def format_dependencies(dependency_files: List[DependencyFile], format_type: str = 'table') -> str:
+    """Format dependencies for display"""
+    if format_type == 'json':
+        data = {}
+        for dep_file in dependency_files:
+            data[str(dep_file.file_path)] = {
+                'type': dep_file.file_type,
+                'dependencies': [
+                    {
+                        'name': dep.name,
+                        'version_spec': str(dep.version_spec) if dep.version_spec else None,
+                        'is_dev': dep.is_dev,
+                        'extras': dep.extras
+                    }
+                    for dep in dep_file.dependencies
+                ]
+            }
+        return json.dumps(data, indent=2)
+    
+    elif format_type == 'table':
+        output = []
+        for dep_file in dependency_files:
+            output.append(f"\n=== {dep_file.file_path} ({dep_file.file_type}) ===")
+            
+            if not dep_file.dependencies:
+                output.append("No dependencies found")
+                continue
+            
+            # Group by dev/prod
+            prod_deps = [d for d in dep_file.dependencies if not d.is_dev]
+            dev_deps = [d for d in dep_file.dependencies if d.is_dev]
+            
+            if prod_deps:
+                output.append("\nProduction Dependencies:")
+                for dep in prod_deps:
+                    version_str = f" {dep.version_spec}" if dep.version_spec else ""
+                    extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
+                    output.append(f"  • {dep.name}{extras_str}{version_str}")
+            
+            if dev_deps:
+                output.append("\nDevelopment Dependencies:")
+                for dep in dev_deps:
+                    version_str = f" {dep.version_spec}" if dep.version_spec else ""
+                    extras_str = f"[{','.join(dep.extras)}]" if dep.extras else ""
+                    output.append(f"  • {dep.name}{extras_str}{version_str}")
+        
+        return '\n'.join(output)
+    
+    else:  # simple format
+        output = []
+        for dep_file in dependency_files:
+            output.append(f"\n{dep_file.file_path} ({dep_file.file_type}):")
+            for dep in dep_file.dependencies:
+                dev_marker = " [DEV]" if dep.is_dev else ""
+                version_str = f" {dep.version_spec}" if dep.version_spec else ""
+                output.append(f"  {dep.name}{version_str}{dev_marker}")
+        
+        return '\n'.join(output)
+
+
+def format_conflicts(conflicts: List[ConflictReport], format_type: str = 'table') -> str:
+    """Format conflicts for display"""
+    if format_type == 'json':
+        data = []
+        for conflict in conflicts:
+            data.append({
+                'package': conflict.package_name,
+                'conflicts': [
+                    {
+                        'file': str(version_info.file_path),
+                        'version_spec': str(version_info.version_spec) if version_info.version_spec else None,
+                        'is_dev': version_info.is_dev
+                    }
+                    for version_info in conflict.version_conflicts
+                ]
+            })
+        return json.dumps(data, indent=2)
+    else:
+        output = []
+        for conflict in conflicts:
+            output.append(f"\n• {conflict.package_name}:")
+            for version_info in conflict.version_conflicts:
+                dev_marker = " [DEV]" if version_info.is_dev else ""
+                version_str = str(version_info.version_spec) if version_info.version_spec else "any version"
+                output.append(f"    {version_info.file_path}: {version_str}{dev_marker}")
+        
+        return '\n'.join(output)
 
 
 def format_dependencies(dependencies: List[Dependency], format_type: str = "table") -> str:
