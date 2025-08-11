@@ -1,0 +1,15 @@
+# Python Dependencies Analysis
+# Generated on: 2025-08-11 08:01:34
+# Total files analyzed: 1
+
+## Summary
+Total unique packages found: 1
+
+## Package Usage
+- dependency_reader (used in 1 file(s))
+  - main.py
+
+## Detailed Analysis
+
+### main.py
+- dependency_reader
