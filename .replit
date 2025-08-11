@@ -1,2 +1,41 @@
+modules = ["python-3.11"]
 [agent]
 expertMode = true
+
+[nix]
+channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Python CLI Tool"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "dependency_reader_test"
+
+[[workflows.workflow]]
+name = "Python CLI Tool"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install click colorlog packaging requests urllib3 toml && python main.py --help"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "dependency_reader_test"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install click colorlog packaging requests toml && python main.py --help"
