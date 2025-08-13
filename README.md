@@ -1,4 +1,6 @@
-
+---
+# Note
+[ This repository only has features for dependencies scan You can use Pyupdater for better features.](https://github.com/savvythunder/PyUpdater) 
 # Python Dependency Reader
 
 A comprehensive CLI tool that reads, parses, and analyzes multiple dependency file formats commonly used in Python projects. The tool supports requirements.txt, Pipfile, and pyproject.toml files, providing unified dependency analysis with conflict detection, security vulnerability checking, license compatibility analysis, and PyPI integration.
